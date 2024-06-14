@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify
-from kafka import KafkaProducer
+from kafka import KafkaProducer, KafkaAdminClient
+from kafka.admin import NewTopic
 import json
 import os
 import time
@@ -18,10 +19,35 @@ def create_kafka_producer():
             return producer
         except Exception as e:
             print(f"Error connecting to Kafka: {e}")
-            print("Retrying in 1 second...")
-            time.sleep(1)
+            print("Retrying in 5 seconds...")
+            time.sleep(5)
+
+def create_kafka_admin():
+    while True:
+        try:
+            admin = KafkaAdminClient(
+                bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
+                client_id='kafka-admin'
+            )
+            return admin
+        except Exception as e:
+            print(f"Error connecting to Kafka Admin: {e}")
+            print("Retrying in 5 seconds...")
+            time.sleep(5)
 
 producer = create_kafka_producer()
+admin_client = create_kafka_admin()
+
+def create_topic(topic_name):
+    try:
+        topic_list = [NewTopic(name=topic_name, num_partitions=1, replication_factor=1)]
+        admin_client.create_topics(new_topics=topic_list, validate_only=False)
+        print(f"Topic '{topic_name}' created.")
+    except Exception as e:
+        if 'TopicExistsError' not in str(e):
+            print(f"Error creating topic '{topic_name}': {e}")
+        else:
+            print(f"Topic '{topic_name}' already exists.")
 
 @app.route('/produce', methods=['POST'])
 def produce_message():
@@ -32,6 +58,8 @@ def produce_message():
     if not topic or not message:
         return jsonify({'error': 'Invalid payload'}), 400
 
+    create_topic(topic)
+    
     producer.send(topic, value=message)
     producer.flush()
 
