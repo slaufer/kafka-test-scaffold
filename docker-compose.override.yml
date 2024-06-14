@@ -1,0 +1,18 @@
+version: '3.8'
+services:
+  zookeeper:
+    command: >
+      bash -c "
+      rm -rf /var/lib/zookeeper/data/version-2 &&
+      chown -R appuser:appuser /var/lib/zookeeper/data &&
+      /etc/confluent/docker/run"
+    user: root
+
+  kafka:
+    command: >
+      bash -c "
+      rm -rf /var/lib/kafka/data/* &&
+      chown -R appuser:appuser /var/lib/kafka/data &&
+      /etc/confluent/docker/run"
+    user: root
+
