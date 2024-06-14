@@ -1,5 +1,5 @@
 from flask import Flask, request, jsonify
-from kafka import KafkaProducer, KafkaAdminClient
+from kafka import KafkaProducer, KafkaConsumer, KafkaAdminClient, TopicPartition
 from kafka.admin import NewTopic
 import json
 import os
@@ -19,8 +19,8 @@ def create_kafka_producer():
             return producer
         except Exception as e:
             print(f"Error connecting to Kafka: {e}")
-            print("Retrying in 5 seconds...")
-            time.sleep(5)
+            print("Retrying in 1 second...")
+            time.sleep(1)
 
 def create_kafka_admin():
     while True:
@@ -64,6 +64,48 @@ def produce_message():
     producer.flush()
 
     return jsonify({'status': 'Message sent'}), 200
+
+@app.route('/consume', methods=['GET'])
+def consume_messages():
+    topic = request.args.get('topic')
+    if not topic:
+        return jsonify({'error': 'Topic not specified'}), 400
+
+    consumer = KafkaConsumer(
+        bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
+        auto_offset_reset='earliest',
+        enable_auto_commit=False,
+        value_deserializer=lambda x: json.loads(x.decode('utf-8'))
+    )
+
+    messages = []
+    partitions = consumer.partitions_for_topic(topic)
+    if partitions is None:
+        return jsonify({'error': 'Topic not found'}), 404
+
+    for partition in partitions:
+        tp = TopicPartition(topic, partition)
+        consumer.assign([tp])
+        consumer.seek_to_beginning(tp)
+
+        while True:
+            msg = consumer.poll(timeout_ms=1000)
+            if not msg:
+                break
+            for record in msg.values():
+                for message in record:
+                    messages.append({
+                        'topic': message.topic,
+                        'partition': message.partition,
+                        'offset': message.offset,
+                        'key': message.key.decode('utf-8') if message.key else None,
+                        'value': message.value
+                    })
+                    if message.offset == consumer.end_offsets([tp])[tp] - 1:
+                        break
+
+    consumer.close()
+    return jsonify(messages)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
