@@ -107,6 +107,17 @@ def consume_messages():
     consumer.close()
     return jsonify(messages)
 
+@app.route('/create_topic', methods=['POST'])
+def create_topic_manually():
+    content = request.json
+    topic_name = content.get('topic_name')
+
+    if not topic_name:
+        return jsonify({'error': 'Invalid payload'}), 400
+
+    create_topic(topic_name)
+    return jsonify({'status': f"Topic '{topic_name}' creation initiated."}), 200
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
 
